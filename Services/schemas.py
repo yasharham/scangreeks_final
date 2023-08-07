@@ -35,7 +35,6 @@ class Token(BaseModel):
 
 class TokenData(BaseModel):
     username: str
-    role: str
 
 class UpdateUser(BaseModel):
     name: Optional[str] = None

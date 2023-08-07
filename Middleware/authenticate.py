@@ -61,11 +61,10 @@ def decode_access_token(token):
     )
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username: str = payload.get("sub")
-        role: str = payload.get("role")
-        if username is None:
+        Client_id: str = payload.get("sub")
+        if Client_id is None:
             raise credentials_exception
-        token_data = schemas.TokenData(username=username,role=role)
+        token_data = schemas.TokenData(username=Client_id)
     except JWTError:
         raise credentials_exception
     return token_data
