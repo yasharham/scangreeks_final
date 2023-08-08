@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Request
 from starlette.middleware.sessions import SessionMiddleware
 from fastapi.middleware.cors import CORSMiddleware
-from API.Router.V1 import user_management_router,tab_management_router
+from API.Router.V1 import user_management_router,tab_management_router,report_management_router
 
 
 # FastApiAddress, FastApiport, socketIP, socketPort, mongoDBClient, mongoDBPort, TestingmongoDBClient, TestingmongoDBPort = readConfigServer()
@@ -12,6 +12,7 @@ app.add_middleware(SessionMiddleware, secret_key="a585b66e3989f473b1e8cd67b7b5fc
 
 app.include_router(user_management_router.router)
 app.include_router(tab_management_router.router)
+app.include_router(report_management_router.router)
 
 origins = [
     "http://localhost:3000",

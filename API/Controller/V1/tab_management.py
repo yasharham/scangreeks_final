@@ -3,6 +3,8 @@ import os
 import shutil
 import traceback
 import pandas as pd
+
+from API.Controller.V1.expense_calculation import expense_calculation
 from Middleware.authenticate import decode_access_token
 from Services.db import *
 from Settings.api_responses import response
@@ -26,7 +28,7 @@ def tradesFO_upload(file):
             cursor.execute(query1, value)
             data = cursor.fetchone()
             if not data:
-                print(data)
+                print(row['TradeId'])
                 insert_query = '''
                         INSERT INTO tradesFO 
                             (`Client_id`,`TradeId`, `TradeDate`, `Token`, `Instrument_Type`, `Symbol`, `Expiry`, `Strike`, `Option_Type`, 
@@ -101,7 +103,7 @@ def get_tab(authToken):
         for i in tabdata:
           date1 = datetime.datetime.strptime(i[1],"%Y-%m-%d")
           expirydate= date1.strftime("%d%b%Y").upper()
-          tabList.append(i[0]+expirydate)
+          tabList.append(i[0]+'_'+expirydate)
         response[200]['data'] = tabList
         return response[200]
     except:
@@ -171,7 +173,10 @@ def getTabData(id,authToken):
         for i in data:
             x = {}
             for k,j in enumerate(column_names):
-                x.update({j:i[k]})
+                if j == 'Units':
+                    x.update({j:int(i[k])})
+                else:
+                    x.update({j:i[k]})
             optionData.append(x)
 
         ############################### Future Data #############################
@@ -183,7 +188,10 @@ def getTabData(id,authToken):
         for i in data:
             x = {}
             for k,j in enumerate(column_names_future):
-                x.update({j:i[k]})
+                if j == 'Units':
+                    x.update({j: int(i[k])})
+                else:
+                    x.update({j: i[k]})
             futData.append(x)
 
         ############################### Equity Data #############################
@@ -195,60 +203,16 @@ def getTabData(id,authToken):
         for i in data:
             x = {}
             for k,j in enumerate(column_names_equity):
-                x.update({j:i[k]})
+                if j == 'Units':
+                    x.update({j: int(i[k])})
+                else:
+                    x.update({j: i[k]})
             equData.append(x)
 
         getMarginData = margincalculation(optionData, futData)
-        # expense = equityExpense(symbol, expiry)
-        response[200]['data'] = {"optionData": optionData,"futData":futData, "equData":equData,"getMarginData": getMarginData} #'totalExpense': expense}
+        expense = expense_calculation(client_id,symbol, expiry)
+        response[200]['data'] = {"optionData": optionData,"futData":futData, "equData":equData,"getMarginData": getMarginData ,'totalExpense': expense}
         return response[200]
     except:
         print(f"getTabData_{id}", traceback.print_exc())
         return response[500]
-
-
-#
-# def xyz():
-
-#     ExpenseData = list(tradesFO.aggregate([{'$match':
-#                                                 {"Symbol": data1[0], "Expiry": formatted_date,
-#                                                  }
-#                                             },
-#                                            {"$group":
-#                                                 {'_id':
-#                                                      {"Token": "$Symbol"},
-#
-#                                                  "Expense": {"$sum": "$TOC"}
-#                                                  }
-#                                             },
-#                                            {
-#                                                "$project": {
-#                                                    "_id": 0,
-#                                                    "Expense": 1
-#                                                }
-#                                            }
-#                                            ]))
-#
-#     print("data", data1)
-#     expense = equityExpense(data1[0], formatted_date)
-#     # totalExpense=ExpenseData[0]
-#     getMarginData = margincalculation(optionData, futData)
-#
-#     response[200]['data'] = {"optionData": optionData, "futData": futData, "equData": equData,
-#                              'totalExpense': expense, "getMarginData": getMarginData}
-#     return response[200]
-#     except:
-#         print(f"getTabData_{id}", traceback.print_exc())
-#         return response[500]
-
-
-
-
-
-
-
-
-
-
-# date = datetime.date.today().strftime("%Y-%m-%d")
-# print(date)

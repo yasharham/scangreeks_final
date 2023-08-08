@@ -6,6 +6,8 @@ from Services.api_services import *
 
 
 def margincalculation(option,future):
+    print(option)
+    print(future)
     # print("f",future)
     spanTableTW = np.zeros((20000,40),dtype=object)
     j = 0

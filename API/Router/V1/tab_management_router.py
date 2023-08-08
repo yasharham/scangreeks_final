@@ -1,9 +1,4 @@
-import csv
-import os
-import shutil,datetime
 from typing import Union
-import pandas as pd
-from Services.db import *
 from fastapi import APIRouter,Header,Request,File,UploadFile
 from API.Controller.V1.tab_management import *
 
@@ -30,9 +25,7 @@ def tabdata(id,authToken: Union[str, None] = Header(default=None)):
    return getTabData(id,authToken)
 
 
-@router.get("/v1/getTradeHistoryfilter",tags=["Scangreeks Data"])
-def getTradeHistory_filter():
-   return getTradeHistoryfilter()
+
 
 
 
