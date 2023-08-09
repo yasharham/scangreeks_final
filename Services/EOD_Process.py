@@ -1,146 +1,152 @@
-# import pandas as pd
+import pandas as pd
+
+from Services.bhavcopy import get_previous_bhavcopy
+
+import os,traceback
+from datetime import datetime,timedelta,date
+import datetime
+from Services.db import *
+import csv
+# from Services.bhavcopy import *
+from Settings.api_responses import response
+from Utils.configReader import readConfigFile
+# from API.Controller.V1.EOD_margin import margin
+
+loc = os.getcwd().split('ScanGreeks')
+fo_csv_file = os.path.join(loc[0],"ScanGreeks/Download/Bhavcopy/fo_bhav.csv")
+cm_file = os.path.join(loc[0],"ScanGreeks/Download/Bhavcopy/cm_bhav.csv")
+
+data = readConfigFile()
+Holidays = data[1]
+current_date = date.today()
+prev_date = (date.today() - timedelta(days=1))
+
+while prev_date.weekday() in [5, 6] or prev_date.strftime("%Y-%m-%d") in Holidays:
+    prev_date -= timedelta(days=1)
+
+previous_date = prev_date.strftime("%Y-%m-%d")
+today = current_date.strftime("%Y-%m-%d")
+
+print(previous_date,today)
+
+def modify_Date(value):
+    date_obj = datetime.strptime(value, "%d-%b-%Y")
+    date = date_obj.strftime("%Y-%m-%d")
+    return date
+
+
+def modify_opion(value):
+    if value == "XX":
+        return "  "
+    else:
+        return value
+
+def bhavcopy():
+    get_previous_bhavcopy()
+    try:
+        print("Uploading FO Bhavcopy............")
+        bhav_fo = pd.read_csv(fo_csv_file)
+        final_fo = bhav_fo.drop(["Unnamed: 15",'HIGH', 'LOW','SETTLE_PR', 'CONTRACTS', 'VAL_INLAKH',
+       'OPEN_INT', 'CHG_IN_OI'], axis=1)
+
+        final_fo['OPTION_TYP'] = final_fo['OPTION_TYP'].apply(modify_opion)
+        final_fo['EXPIRY_DT'] = final_fo['EXPIRY_DT'].apply(modify_Date)
+        final_fo['TIMESTAMP'] = final_fo['TIMESTAMP'].apply(modify_Date)
+
+        final_fo.to_sql('Bhavcopy_FO', con=engine, if_exists='append',index=False)
+        print("Successfully Uploaded FO Bhavcopy............")
+    except:
+        print("FOBhav", traceback.print_exc())
+    try:
+        print("Uploading EQ Bhavcopy............")
+        bhav_eq = pd.read_csv(cm_file)
+        final_eq = bhav_eq.drop(['SERIES', 'HIGH', 'LOW', 'LAST',
+                                 'TOTTRDQTY', 'TOTTRDVAL', 'TOTALTRADES', 'ISIN', 'Unnamed: 13'], axis=1)
+
+        final_eq['TIMESTAMP'] = final_eq['TIMESTAMP'].apply(modify_Date)
+
+        final_eq.to_sql('Bhavcopy_EQ', con=engine, if_exists='append', index=False)
+        print("Successfully Uploaded EQ Bhavcopy............")
+    except:
+        print("EQBhav", traceback.print_exc())
+
+
+
+def Closing_position():
+    query1 = '''
+        create TEMPORARY table temp1 as
+            select 
+            Client_id, Token, Instrument_Type, Symbol, Expiry, Strike, Option_Type,
+            SUM(Units) as netQty,
+            SUM(Premium) as premium
+            from tradesFO  where TradeDate = %s
+            GROUP BY Client_id,Token,Instrument_Type, Symbol, Expiry, Strike, Option_Type;
+            '''
+
+    query2 = '''
+        create temporary table temp2 as
+            select * from temp1
+            Union All
+            select Client_id, Token, Instrument_Type, Symbol, Expiry, Strike, Option_Type, netQty, premium 
+            from Closing_Position where Date = %s and netQty != 0;
+            '''
+
+    query3 = '''
+        create temporary table temp3 as  
+            select Client_id, Token, Instrument_Type, Symbol, Expiry, Strike, Option_Type,
+            SUM(premium) as premium,
+            SUM(netQty) as netQty from temp2
+            group by Client_id, Token, Instrument_Type, Symbol, Expiry, Strike, Option_Type;
+             '''
+
+    query4 = '''
+       CREATE TEMPORARY table temp_bhav as select * from Bhavcopy_FO where TIMESTAMP = %s;     
+             '''
+
+    query5 = '''
+        create temporary TABLE temp4 as
+            select a.*,
+            current_date as Date,
+            b.CLOSE as Closing_price
+            from temp3 a left join temp_bhav b 
+            on a.Symbol = b.SYMBOL and a.Expiry = b.EXPIRY_DT and a.Strike = b.STRIKE_PR and a.Option_type = b.OPTION_TYP;
+            '''
+
+    query6 = '''
+         INSERT INTO Closing_Position
+            SELECT Client_id, Token, Instrument_Type, Symbol, Expiry, Strike, Option_Type, netQty, premium, Date, Closing_price
+            FROM temp4;
+             '''
+    try:
+        print('Creating Closing Position...................')
+        cursor = mydb.cursor()
+        cursor.execute('''drop TEMPORARY table IF EXISTS temp1;''')
+        cursor.execute('''drop TEMPORARY table IF EXISTS temp2;''')
+        cursor.execute('''drop TEMPORARY table IF EXISTS temp3;''')
+        cursor.execute('''drop TEMPORARY table IF EXISTS temp_bhav;''')
+        cursor.execute('''drop TEMPORARY table IF EXISTS temp4;''')
+
+        cursor.execute(query1,[today])
+        cursor.execute(query2,[previous_date])
+        cursor.execute(query3)
+        cursor.execute(query4,[today])
+        cursor.execute(query5)
+        cursor.execute(query6)
+        mydb.commit()
+        cursor.close()
+        print('Successfully Created Closing Position...................')
+    except:
+        print(traceback.print_exc())
+
+
+def bill_generation():
+    pass
+
+
+
+
 #
-# from Services.bhavcopy import get_previous_bhavcopy
-#
-# import os,traceback
-# from datetime import datetime,timedelta,date
-# from Services.db import *
-# import csv
-# # from Services.bhavcopy import *
-# from Settings.api_responses import response
-# from Utils.configReader import readConfigFile
-# # from API.Controller.V1.EOD_margin import margin
-#
-# loc = os.getcwd().split('ScanGreeks')
-# fo_csv_file = os.path.join(loc[0],"ScanGreeks/Download/Bhavcopy/fo_bhav.csv")
-# cm_file = os.path.join(loc[0],"ScanGreeks/Download/Bhavcopy/cm_bhav.csv")
-#
-# data = readConfigFile()
-# Holidays = data[1]
-# current_date = date.today()
-# prev_date = (date.today() - timedelta(days=1))
-#
-# while prev_date.weekday() in [5, 6] or prev_date.strftime("%Y-%m-%d") in Holidays:
-#     prev_date -= timedelta(days=1)
-#
-# previous_date = prev_date.strftime("%Y-%m-%d")
-# today = current_date.strftime("%Y-%m-%d")
-#
-#
-# def bhavcopy_FO():
-#     try:
-#         cursor = mydb.cursor()
-#         bhavFO = pd.read_csv(fo_csv_file, index_col=0)
-#         insert_query = '''
-#                                INSERT INTO Bhavcopy_FO values (%s,%s,%s,%s,%s,%s)
-#                                '''
-#         print(bhavFO.columns)
-#         for index, row in bhavFO.iterrows():
-#             date_obj = datetime.strptime(row['EXPIRY_DT'], "%d-%b-%Y")
-#             expiry = date_obj.strftime("%Y-%m-%d")
-#
-#             date_obj1 = datetime.strptime(row['TIMESTAMP'], "%d-%b-%Y")
-#             date = date_obj1.strftime("%Y-%m-%d")
-#
-#             values = (row['SYMBOL'], expiry, row['STRIKE_PR'], row['OPTION_TYP'], row['CLOSE'], date)
-#             cursor.execute(insert_query, values)
-#             mydb.commit()
-#         cursor.close()
-#
-#         #     # Modify the INSERT statement according to your table structure
-#         #     query1 = ''' select TradeID from tradesFO where TradeId = %s and TradeDate = %s'''
-#         #     value = (row['TradeId'], row['Date'])
-#         #     cursor.execute(query1, value)
-#         #     data = cursor.fetchone()
-#         #     if not data:
-#         #         print(row['TradeId'])
-#         #         insert_query = '''
-#         #                        INSERT INTO tradesFO
-#         #                            (`Client_id`,`TradeId`, `TradeDate`, `Token`, `Instrument_Type`, `Symbol`, `Expiry`, `Strike`, `Option_Type`,
-#         #                            `Units`, `Ltp`, `Tradeamount`, `AssetToken`, `Lotsize`, `Premium`, `TOC`, `TorM`)
-#         #                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-#         #                                  '''
-#         #
-#         #         values = (
-#         #             'A2021', row['TradeId'], row['Date'], row['Token'], row['Instrument_Type'], row['Symbol'],
-#         #             row['Expiry'],
-#         #             row['Strike'], row['Option_Type'], row['Units'], row['Ltp'], row['Tradeamount'], row['AssetToken'],
-#         #             row['Lotsize'], row['Premium'], row['TOC'], row['TorM'])
-#         #         cursor.execute(insert_query, values)
-#         #         mydb.commit()
-#
-#     #     '''Get Today Date'''
-#     #
-#     #     closing_rate_data = {}
-#     #
-#     #     '''
-#     #     Reads CSV file of bhavcopy
-#     #     and add values to temp_table db
-#     #     '''
-#     #
-#     #     with open(fo_csv_file, 'r') as csvfile:
-#     #         reader = csv.DictReader(csvfile)
-#     #         for row in reader:
-#     #             symbol = row["SYMBOL"]
-#     #             expiry = row["EXPIRY_DT"]
-#     #             formatted_date = datetime.strptime(expiry, "%d-%b-%Y")
-#     #             expiry_date = formatted_date.strftime("%Y-%m-%d")
-#     #             strike = float(row["STRIKE_PR"])
-#     #             option_type = row["OPTION_TYP"]
-#     #             if option_type == "XX":
-#     #                 option_type = "  "
-#     #             date_today = row["TIMESTAMP"]
-#     #             closing_rate = float(row["CLOSE"])
-#     #
-#     #             key = (symbol, expiry_date, strike, option_type, date_today)
-#     #             closing_rate_data[key] = closing_rate
-#     #
-#     #
-#     #
-#     #         temp_table_bhavFO.insert_many([
-#     #             {
-#     #                 'symbol': symbol,
-#     #                 'expiry': expiry,
-#     #                 'strike': strike,
-#     #                 'option_type': option_type,
-#     #                 'date': date_today,
-#     #                 'closing_rate': closing_rate
-#     #             }
-#     #             for key, closing_rate in closing_rate_data.items()
-#     #             for symbol, expiry, strike, option_type, date_today in [key]
-#     #         ])
-#     except:
-#         print(traceback.print_exc())
-#
-# bhavcopy_FO()
-#
-# # def bhavcopy_EQ():
-# #     try:
-# #         temp_table_bhavEQ = tradeData["temp_table_bhavEQ"]
-# #         temp_table_bhavEQ.drop()
-# #         closing_rate_data = {}
-# #         with open(cm_file, 'r') as csvfile:
-# #             reader = csv.DictReader(csvfile)
-# #             for row in reader:
-# #                 symbol = row["SYMBOL"]
-# #                 date_today = row["TIMESTAMP"]
-# #                 closing_rate = float(row["CLOSE"])
-# #                 key = (symbol, date_today)
-# #                 closing_rate_data[key] = closing_rate
-# #             temp_table_bhavEQ.insert_many([
-# #                 {
-# #                     'symbol': symbol,
-# #                     'date': date_today,
-# #                     'closing_rate': closing_rate
-# #                 }
-# #
-# #                 for key, closing_rate in closing_rate_data.items()
-# #                 for symbol, date_today in [key]
-# #             ])
-# #     except:
-# #         print(traceback.print_exc())
-#
-# #
+
 # # def previous_open(date):
 # #     try:
 # #         prev_open = list(position_Data.aggregate([
